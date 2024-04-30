@@ -1,52 +1,54 @@
-from fastapi import FastAPI, HTTPException, File, UploadFile, status
+from fastapi import FastAPI, HTTPException, status
 from fastapi.responses import JSONResponse
-import uvicorn
+import requests
 import numpy as np
 import cv2
 import face_recognition
 
 app = FastAPI()
 
-def read_image_file(file: UploadFile):
+def read_image_from_url(url: str):
     """
-    Reads an uploaded image file and converts it to a format suitable for processing.
-
+    Fetches an image from a URL and converts it to a format suitable for processing.
     Args:
-        file (UploadFile): The uploaded image file.
-
+        url (str): URL of the image.
     Returns:
         numpy.ndarray: The image in an array format suitable for face recognition, or None if conversion fails.
     """
-    image_stream = file.file
-    image_stream.seek(0)
-    image_bytes = image_stream.read()
-    image = np.frombuffer(image_bytes, np.uint8)
-    image = cv2.imdecode(image, cv2.IMREAD_COLOR)
-    return image
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        image_bytes = np.asarray(bytearray(response.content), dtype=np.uint8)
+        image = cv2.imdecode(image_bytes, cv2.IMREAD_COLOR)
+        if image is not None:
+            return image
+        else:
+            raise ValueError("Could not decode the image from the provided URL.")
+    except Exception as e:
+        print(f"Error reading image from URL {url}: {str(e)}")
+        return None
 
 def load_image_and_find_face_encoding(image):
     """
     Processes an image to find face encodings.
-
     Args:
         image (numpy.ndarray): The image array to process.
-
     Returns:
         list: The first found face encoding, or None if no face is detected.
     """
-    if image is None:
+    try:
+        face_encodings = face_recognition.face_encodings(image)
+        return face_encodings[0] if face_encodings else None
+    except Exception as e:
+        print(f"Error finding face encodings: {str(e)}")
         return None
-    face_encodings = face_recognition.face_encodings(image)
-    return face_encodings[0] if face_encodings else None
 
 def compare_faces(encoding_1, encoding_2):
     """
     Compares two face encodings to determine if they are of the same person.
-
     Args:
         encoding_1 (list): The first face encoding.
         encoding_2 (list): The second face encoding.
-
     Returns:
         dict: A dictionary containing the match result and accuracy.
     """
@@ -61,22 +63,12 @@ def compare_faces(encoding_1, encoding_2):
         return {"match": False, "accuracy": 0}
 
 @app.post("/compare-faces/")
-async def compare_faces_api(file1: UploadFile = File(...), file2: UploadFile = File(...)):
+async def compare_faces_api(url1: str, url2: str):
     """
-    API endpoint to compare two uploaded face images to check if they are of the same person.
-
-    Args:
-        file1 (UploadFile): The first uploaded image file.
-        file2 (UploadFile): The second uploaded image file.
-
-    Raises:
-        HTTPException: If one or both images fail to process.
-
-    Returns:
-        JSONResponse: The comparison result containing match status and accuracy.
+    API endpoint to compare two face images from URLs to check if they are of the same person.
     """
-    image_1 = read_image_file(file1)
-    image_2 = read_image_file(file2)
+    image_1 = read_image_from_url(url1)
+    image_2 = read_image_from_url(url2)
     if image_1 is None or image_2 is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to process one or both images.")
     
@@ -89,13 +81,6 @@ async def compare_faces_api(file1: UploadFile = File(...), file2: UploadFile = F
 async def generic_exception_handler(request, exc):
     """
     Generic exception handler for the FastAPI app.
-
-    Args:
-        request (Request): The request object.
-        exc (Exception): The caught exception.
-
-    Returns:
-        JSONResponse: A response indicating an internal server error.
     """
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -103,4 +88,5 @@ async def generic_exception_handler(request, exc):
     )
 
 if __name__ == "__main__":
+    import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8555)
