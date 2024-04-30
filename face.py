@@ -57,15 +57,4 @@ def compare_faces(encoding_1, encoding_2):
     else:
         return {"match": False, "accuracy": 0}
 
-# Revised usage of the functions with structured responses:
-url_1 = "https://example.com/photo1.jpg"
-url_2 = "https://example.com/photo2.jpg"
-image_1 = download_image(url_1)
-image_2 = download_image(url_2)
-face_1 = load_image_and_find_face_encoding(image_1)
-face_2 = load_image_and_find_face_encoding(image_2)
-response = compare_faces(face_1, face_2)
-response_message = response.get("error", f"The faces are {'the same' if response['match'] else 'not the same'}.")
-if response['match']:
-    response_message += f" Match accuracy: {response['accuracy']}%"
-print(response_message)
+
