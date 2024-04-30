@@ -43,10 +43,10 @@ def load_image_and_check_mask(image, image_number):
         face_locations = face_recognition.face_locations(image)
         face_landmarks_list = face_recognition.face_landmarks(image, face_locations)
         if len(face_landmarks_list) < 1:
-            return None, True, image_number  # No face found
+            return None, True, image_number 
         for face_landmarks in face_landmarks_list:
             if "nose_tip" not in face_landmarks or "top_lip" not in face_landmarks:
-                return None, True, image_number  # Nose or lips not detected
+                return None, True, image_number
         face_encodings = face_recognition.face_encodings(image, face_locations)
         return face_encodings[0] if face_encodings else None, False, None
     except Exception as e:
@@ -103,4 +103,4 @@ async def generic_exception_handler(request, exc):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8888)
+    uvicorn.run(app, host="127.0.0.1", port=8555)

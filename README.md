@@ -1,6 +1,4 @@
 #face recognation 
 
-`pip install -r requirements.txt`
-
-ubuntu: python3 app.py 
-windows: py app.py
+`docker-compose -f prod.yml up -d --build`
+`docker-compose -f prod.yml logs app`
