@@ -1,10 +1,10 @@
-from fastapi import FastAPI, HTTPException, status
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 import requests
 import numpy as np
 import cv2
 import face_recognition
+from fastapi import FastAPI, HTTPException, status
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 app = FastAPI()
 
@@ -29,21 +29,31 @@ def read_image_from_url(url: str):
         print(f"Error reading image from URL {url}: {str(e)}")
         return None
 
-def load_image_and_check_mask(image):
+def resize_image(image, width=100, height=100):
+    """
+    Resizes the image to the specified width and height.
+    """
+    return cv2.resize(image, (width, height))
+
+def load_image_and_check_mask(image, image_number):
     """
     Checks for masks and returns face encodings if no mask is present.
     """
     try:
         face_locations = face_recognition.face_locations(image)
         face_landmarks_list = face_recognition.face_landmarks(image, face_locations)
+        if len(face_landmarks_list) < 1:
+            return None, True, image_number  # No face found
         for face_landmarks in face_landmarks_list:
             if "nose_tip" not in face_landmarks or "top_lip" not in face_landmarks:
-                return None, True
+                return None, True, image_number  # Nose or lips not detected
         face_encodings = face_recognition.face_encodings(image, face_locations)
-        return face_encodings[0] if face_encodings else None, False
+        return face_encodings[0] if face_encodings else None, False, None
     except Exception as e:
         print(f"Error processing image: {str(e)}")
-        return None, False
+        return None, False, None
+
+
 
 def compare_faces(encoding_1, encoding_2):
     """
@@ -56,6 +66,7 @@ def compare_faces(encoding_1, encoding_2):
     accuracy = 100 - round(distance * 100)
     return {"match": bool(match_results[0]), "accuracy": accuracy}
 
+
 @app.post("/compare-faces/")
 async def compare_faces_api(request: CompareRequest):
     """
@@ -65,10 +76,18 @@ async def compare_faces_api(request: CompareRequest):
     image_2 = read_image_from_url(request.url2)
     if image_1 is None or image_2 is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to process one or both images.")
-    face_1, mask_1 = load_image_and_check_mask(image_1)
-    face_2, mask_2 = load_image_and_check_mask(image_2)
+
+    image_1 = resize_image(image_1)
+    image_2 = resize_image(image_2)
+
+    face_1, mask_1, image_1_number = load_image_and_check_mask(image_1, 1)
+    face_2, mask_2, image_2_number = load_image_and_check_mask(image_2, 2)
     if mask_1 or mask_2:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please ensure that both images do not have a mask obscuring the face.")
+        if mask_1:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please ensure that image 1 does not have a mask obscuring the face.")
+        else:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please ensure that image 2 does not have a mask obscuring the face.")
+        
     response = compare_faces(face_1, face_2)
     return response
 
@@ -84,4 +103,4 @@ async def generic_exception_handler(request, exc):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8888)
