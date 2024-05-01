@@ -84,7 +84,7 @@ async def compare_faces_api(request: CompareRequest):
     image_1 = await read_image_from_url(request.url1)
     image_2 = await read_image_from_url(request.url2)
     if image_1 is None or image_2 is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to process one or both images.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, message="Failed to process one or both images.")
 
     image_1 = resize_image(image_1)
     image_2 = resize_image(image_2)
@@ -93,9 +93,9 @@ async def compare_faces_api(request: CompareRequest):
     face_2, mask_2, image_2_number = load_image_and_check_mask(image_2, 2)
     if mask_1 or mask_2:
         if mask_1:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please ensure that image 1 does not have a mask obscuring the face.")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, message="Please ensure that image 1 does not have a mask obscuring the face.")
         else:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please ensure that image 2 does not have a mask obscuring the face.")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, message="Please ensure that image 2 does not have a mask obscuring the face.")
     THRESHOLD_VALUE = 0.5
     response = compare_faces(face_1, face_2, threshold=THRESHOLD_VALUE)
     return response
