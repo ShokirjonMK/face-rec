@@ -2,11 +2,13 @@ import numpy as np
 import cv2
 import dlib
 from math import sqrt
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from aiohttp import ClientSession
 from typing import Optional
+
+from cache import cache
 
 
 app = FastAPI()
@@ -33,13 +35,18 @@ async def read_image_from_url(url: str) -> Optional[np.ndarray]:
     Returns:
         Optional[np.ndarray]: Decoded image as a NumPy array.
     """
+    cached_image = await cache.get(url)
+    if cached_image is not None:
+        return cached_image
+
     async with ClientSession() as session:
         try:
             async with session.get(url) as response:
                 response.raise_for_status()
                 image_bytes = await response.read()
-                image = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR) 
+                image = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
                 if image is not None:
+                    await cache.set(url, image)
                     return image
                 else:
                     raise ValueError("Could not decode the image from the provided URL.")
@@ -127,7 +134,6 @@ def compare_faces(descriptor1: np.ndarray, descriptor2: np.ndarray, threshold: f
     accuracy = 100 - round(euclidean_distance * 100, 2)
     
     return {"status": 1, "data":{"match": match, "accuracy": accuracy}, "message": "Success"}
-    # return {"match": match, "accuracy": accuracy}
 
 
 @app.post("/compare-faces/")
@@ -145,7 +151,6 @@ async def compare_faces_api(request: CompareRequest):
     image2 = await read_image_from_url(request.url2)
     if image1 is None or image2 is None:
         return {"status": 0, "message": "Failed to process one or both images"}
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to process one or both images.")
 
     image1 = resize_image(image1)
     image2 = resize_image(image2)
@@ -155,8 +160,6 @@ async def compare_faces_api(request: CompareRequest):
     if no_face1 or no_face2:
         
         return {"status": 0, "message": "Please ensure that image 1 does not have a mask obscuring the face." if no_face1 else "Please ensure that image 2 does not have a mask obscuring the face"}
-        # detail = "Please ensure that image 1 does not have a mask obscuring the face." if no_face1 else "Please ensure that image 2 does not have a mask obscuring the face."
-        # raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
     response = compare_faces(descriptor1, descriptor2)
     return response
