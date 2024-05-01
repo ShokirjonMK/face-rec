@@ -1,21 +1,37 @@
 import numpy as np
 import cv2
-import face_recognition
+import dlib
+from math import sqrt
 from fastapi import FastAPI, HTTPException, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from aiohttp import ClientSession
+from typing import Optional
+
 
 app = FastAPI()
 
 class CompareRequest(BaseModel):
+    """
+    Pydantic model for comparing faces.
+    """
     url1: str
     url2: str
 
+detector = dlib.get_frontal_face_detector()
+predictor = dlib.shape_predictor("face/shape_predictor_68_face_landmarks.dat")
+face_rec_model = dlib.face_recognition_model_v1("face/dlib_face_recognition_resnet_model_v1.dat")
 
-async def read_image_from_url(url: str):
+
+async def read_image_from_url(url: str) -> Optional[np.ndarray]:
     """
-    Asynchronously fetches an image from a URL and converts it to a format suitable for processing.
+    Read image from URL asynchronously.
+
+    Args:
+        url (str): URL of the image.
+
+    Returns:
+        Optional[np.ndarray]: Decoded image as a NumPy array.
     """
     async with ClientSession() as session:
         try:
@@ -32,83 +48,127 @@ async def read_image_from_url(url: str):
             return None
 
 
-def resize_image(image, width=100, height=100):
+def resize_image(image: np.ndarray, width: int = 800, height: int = 800) -> np.ndarray:
     """
-    Resizes the image to the specified width and height.
+    Resize image to specified dimensions.
+
+    Args:
+        image (np.ndarray): Input image as a NumPy array.
+        width (int): Width of the resized image.
+        height (int): Height of the resized image.
+
+    Returns:
+        np.ndarray: Resized image as a NumPy array.
     """
     return cv2.resize(image, (width, height))
 
 
-
-def load_image_and_check_mask(image, image_number):
+def get_face_descriptor(image: np.ndarray):
     """
-    Checks for masks and returns face encodings if no mask is present.
+    Get face descriptor from an image.
+
+    Args:
+        image (np.ndarray): Input image as a NumPy array.
+
+    Returns:
+        Tuple: Face descriptor, boolean indicating if no face is detected, and error code.
     """
     try:
-        face_locations = face_recognition.face_locations(image)
-        face_landmarks_list = face_recognition.face_landmarks(image, face_locations)
-        if len(face_landmarks_list) < 1:
-            return None, True, image_number 
-        for face_landmarks in face_landmarks_list:
-            if "nose_tip" not in face_landmarks or "top_lip" not in face_landmarks:
-                return None, True, image_number
-        face_encodings = face_recognition.face_encodings(image, face_locations)
-        return face_encodings[0] if face_encodings else None, False, None
+        faces = detector(image, 1)
+        if len(faces) > 0:
+            shape = predictor(image, faces[0])  
+
+            nose_landmarks = shape.parts()[30:36]
+            mouth_landmarks = shape.parts()[48:68]
+
+            if any(l.x == 0 and l.y == 0 for l in nose_landmarks) or any(l.x == 0 and l.y == 0 for l in mouth_landmarks):
+                return None, False, 2 
+            else:
+                face_descriptor = face_rec_model.compute_face_descriptor(image, shape)
+                return np.array(face_descriptor), False, None
+        else:
+            return None, True, 1 
     except Exception as e:
-        print(f"Error processing image: {str(e)}")
+        print(f"Error processing image for face descriptor: {str(e)}")
         return None, False, None
 
 
+def compute_euclidean_distance(vec1: np.ndarray, vec2: np.ndarray) -> float:
+    """
+    Compute the Euclidean distance between two vectors.
 
-def compare_faces(encoding_1, encoding_2, threshold=0.6):
+    Args:
+        vec1 (np.ndarray): First vector.
+        vec2 (np.ndarray): Second vector.
+
+    Returns:
+        float: Euclidean distance between the two vectors.
     """
-    Compares two face encodings and returns a match result and percentage.
-    The threshold for considering a match can be adjusted to be more or less strict.
+    return sqrt(sum((v1 - v2) ** 2 for v1, v2 in zip(vec1, vec2)))
+
+
+def compare_faces(descriptor1: np.ndarray, descriptor2: np.ndarray, threshold: float = 0.6) -> dict:
     """
-    if encoding_1 is None or encoding_2 is None:
+    Compare face descriptors and determine if they match.
+
+    Args:
+        descriptor1 (np.ndarray): Face descriptor of the first image.
+        descriptor2 (np.ndarray): Face descriptor of the second image.
+        threshold (float): Threshold for matching faces.
+
+    Returns:
+        dict: Dictionary containing match status and accuracy.
+    """
+    if descriptor1 is None or descriptor2 is None:
         return {"error": "One or both images do not contain a face or failed to load correctly."}
     
-    distance = face_recognition.face_distance([encoding_1], encoding_2)[0]
-    match = bool(distance < threshold)
-    accuracy = 100 - round(distance * 100)
+    euclidean_distance = compute_euclidean_distance(descriptor1, descriptor2)
+    match = bool(euclidean_distance < threshold)
+    accuracy = 100 - round(euclidean_distance * 100, 2)
     
-    return {"status": 1, "data":{"match": match, "accuracy": accuracy}, "message": "Success"}
-
+    return {"match": match, "accuracy": accuracy}
 
 
 @app.post("/compare-faces/")
 async def compare_faces_api(request: CompareRequest):
     """
-    API endpoint to compare two face images from URLs.
+    API endpoint for comparing faces from two images.
+
+    Args:
+        request (CompareRequest): Request containing URLs of two images.
+
+    Returns:
+        JSONResponse: JSON response containing match status and accuracy.
     """
-    image_1 = await read_image_from_url(request.url1)
-    image_2 = await read_image_from_url(request.url2)
-    if image_1 is None or image_2 is None:
-        return {"status": 0, "message": "Failed to process one or both images"}
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, message="Failed to process one or both images.")
+    image1 = await read_image_from_url(request.url1)
+    image2 = await read_image_from_url(request.url2)
+    if image1 is None or image2 is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to process one or both images.")
 
-    image_1 = resize_image(image_1)
-    image_2 = resize_image(image_2)
+    image1 = resize_image(image1)
+    image2 = resize_image(image2)
 
-    face_1, mask_1, image_1_number = load_image_and_check_mask(image_1, 1)
-    face_2, mask_2, image_2_number = load_image_and_check_mask(image_2, 2)
-    if mask_1 or mask_2:
-        if mask_1:
-            return {"status": 0, "message": "Please ensure that image 1 does not have a mask obscuring the face"}
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, message="Please ensure that image 1 does not have a mask obscuring the face.")
-        else:
-            return {"status": 0, "message": "Please ensure that image 2 does not have a mask obscuring the face"}
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, message="Please ensure that image 2 does not have a mask obscuring the face.")
-    THRESHOLD_VALUE = 0.5
-    response = compare_faces(face_1, face_2, threshold=THRESHOLD_VALUE)
+    descriptor1, no_face1, _ = get_face_descriptor(image1)
+    descriptor2, no_face2, _ = get_face_descriptor(image2)
+    if no_face1 or no_face2:
+        detail = "Please ensure that image 1 does not have a mask obscuring the face." if no_face1 else "Please ensure that image 2 does not have a mask obscuring the face."
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+    response = compare_faces(descriptor1, descriptor2)
     return response
-
 
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(request, exc):
     """
-    Handles any exceptions that occur during API operations.
+    Exception handler for handling internal server errors.
+
+    Args:
+        request: The request that caused the exception.
+        exc: The exception that was raised.
+
+    Returns:
+        JSONResponse: JSON response containing an error message.
     """
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
