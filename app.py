@@ -55,16 +55,22 @@ def load_image_and_check_mask(image, image_number):
 
 
 
-def compare_faces(encoding_1, encoding_2):
+def compare_faces(encoding_1, encoding_2, threshold=0.6):
     """
     Compares two face encodings and returns a match result and percentage.
+    The threshold for considering a match can be adjusted to be more or less strict.
     """
     if encoding_1 is None or encoding_2 is None:
         return {"error": "One or both images do not contain a face or failed to load correctly."}
-    match_results = face_recognition.compare_faces([encoding_1], encoding_2)
+    
     distance = face_recognition.face_distance([encoding_1], encoding_2)[0]
+    match = bool(distance < threshold)
     accuracy = 100 - round(distance * 100)
-    return {"match": bool(match_results[0]), "accuracy": accuracy}
+    
+    return {"match": match, "accuracy": accuracy}
+
+
+
 
 
 @app.post("/compare-faces/")
@@ -87,8 +93,8 @@ async def compare_faces_api(request: CompareRequest):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please ensure that image 1 does not have a mask obscuring the face.")
         else:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please ensure that image 2 does not have a mask obscuring the face.")
-        
-    response = compare_faces(face_1, face_2)
+    THRESHOLD_VALUE = 0.5
+    response = compare_faces(face_1, face_2, threshold=THRESHOLD_VALUE)
     return response
 
 @app.exception_handler(Exception)
