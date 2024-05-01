@@ -114,6 +114,31 @@ def compute_euclidean_distance(vec1: np.ndarray, vec2: np.ndarray) -> float:
     return sqrt(sum((v1 - v2) ** 2 for v1, v2 in zip(vec1, vec2)))
 
 
+# def compare_faces(descriptor1: np.ndarray, descriptor2: np.ndarray, threshold: float = 0.6) -> dict:
+#     """
+#     Compare face descriptors and determine if they match.
+
+#     Args:
+#         descriptor1 (np.ndarray): Face descriptor of the first image.
+#         descriptor2 (np.ndarray): Face descriptor of the second image.
+#         threshold (float): Threshold for matching faces.
+
+#     Returns:
+#         dict: Dictionary containing match status and accuracy.
+#     """
+#     if descriptor1 is None or descriptor2 is None:
+#         return {"error": "One or both images do not contain a face or failed to load correctly."}
+    
+#     euclidean_distance = compute_euclidean_distance(descriptor1, descriptor2)
+#     match = bool(euclidean_distance < threshold)
+#     accuracy = 100 - round(euclidean_distance * 100, 2)
+
+#     if match == True:   
+#         return {"status": 1, "data":{"match": match, "accuracy": accuracy}, "message": "Success"}
+#     else:
+#         return {"status": 1, "data":{"match": match, "accuracy": accuracy}, "message": "Error"}
+
+
 def compare_faces(descriptor1: np.ndarray, descriptor2: np.ndarray, threshold: float = 0.6) -> dict:
     """
     Compare face descriptors and determine if they match.
@@ -130,11 +155,14 @@ def compare_faces(descriptor1: np.ndarray, descriptor2: np.ndarray, threshold: f
         return {"error": "One or both images do not contain a face or failed to load correctly."}
     
     euclidean_distance = compute_euclidean_distance(descriptor1, descriptor2)
-    match = bool(euclidean_distance < threshold)
     accuracy = 100 - round(euclidean_distance * 100, 2)
     
-    return {"status": 1, "data":{"match": match, "accuracy": accuracy}, "message": "Success"}
-
+    if accuracy < 40:
+        return {"status": 0, "data": {"match": False, "accuracy": accuracy}, "message": "Error"}
+    else:
+        match = bool(euclidean_distance < threshold)
+        return {"status": 1, "data": {"match": match, "accuracy": accuracy}, "message": "Success"}
+    
 
 @app.post("/compare-faces/")
 async def compare_faces_api(request: CompareRequest):
