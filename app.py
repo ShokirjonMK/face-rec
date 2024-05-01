@@ -126,7 +126,8 @@ def compare_faces(descriptor1: np.ndarray, descriptor2: np.ndarray, threshold: f
     match = bool(euclidean_distance < threshold)
     accuracy = 100 - round(euclidean_distance * 100, 2)
     
-    return {"match": match, "accuracy": accuracy}
+    return {"status": 1, "data":{"match": match, "accuracy": accuracy}, "message": "Success"}
+    # return {"match": match, "accuracy": accuracy}
 
 
 @app.post("/compare-faces/")
@@ -143,6 +144,7 @@ async def compare_faces_api(request: CompareRequest):
     image1 = await read_image_from_url(request.url1)
     image2 = await read_image_from_url(request.url2)
     if image1 is None or image2 is None:
+        return {"status": 0, "message": "Failed to process one or both images"}
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to process one or both images.")
 
     image1 = resize_image(image1)
@@ -151,8 +153,10 @@ async def compare_faces_api(request: CompareRequest):
     descriptor1, no_face1, _ = get_face_descriptor(image1)
     descriptor2, no_face2, _ = get_face_descriptor(image2)
     if no_face1 or no_face2:
-        detail = "Please ensure that image 1 does not have a mask obscuring the face." if no_face1 else "Please ensure that image 2 does not have a mask obscuring the face."
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+        
+        return {"status": 0, "message": "Please ensure that image 1 does not have a mask obscuring the face." if no_face1 else "Please ensure that image 2 does not have a mask obscuring the face"}
+        # detail = "Please ensure that image 1 does not have a mask obscuring the face." if no_face1 else "Please ensure that image 2 does not have a mask obscuring the face."
+        # raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
     response = compare_faces(descriptor1, descriptor2)
     return response
