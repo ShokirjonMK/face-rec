@@ -1,10 +1,10 @@
-import requests
 import numpy as np
 import cv2
 import face_recognition
 from fastapi import FastAPI, HTTPException, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from aiohttp import ClientSession
 
 app = FastAPI()
 
@@ -12,28 +12,33 @@ class CompareRequest(BaseModel):
     url1: str
     url2: str
 
-def read_image_from_url(url: str):
+
+async def read_image_from_url(url: str):
     """
-    Fetches an image from a URL and converts it to a format suitable for processing.
+    Asynchronously fetches an image from a URL and converts it to a format suitable for processing.
     """
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        image_bytes = np.asarray(bytearray(response.content), dtype=np.uint8)
-        image = cv2.imdecode(image_bytes, cv2.IMREAD_COLOR)
-        if image is not None:
-            return image
-        else:
-            raise ValueError("Could not decode the image from the provided URL.")
-    except Exception as e:
-        print(f"Error reading image from URL {url}: {str(e)}")
-        return None
+    async with ClientSession() as session:
+        try:
+            async with session.get(url) as response:
+                response.raise_for_status()
+                image_bytes = await response.read()
+                image = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR) 
+                if image is not None:
+                    return image
+                else:
+                    raise ValueError("Could not decode the image from the provided URL.")
+        except Exception as e:
+            print(f"Error reading image from URL {url}: {str(e)}")
+            return None
+
 
 def resize_image(image, width=100, height=100):
     """
     Resizes the image to the specified width and height.
     """
     return cv2.resize(image, (width, height))
+
+
 
 def load_image_and_check_mask(image, image_number):
     """
@@ -71,15 +76,13 @@ def compare_faces(encoding_1, encoding_2, threshold=0.6):
 
 
 
-
-
 @app.post("/compare-faces/")
 async def compare_faces_api(request: CompareRequest):
     """
     API endpoint to compare two face images from URLs.
     """
-    image_1 = read_image_from_url(request.url1)
-    image_2 = read_image_from_url(request.url2)
+    image_1 = await read_image_from_url(request.url1)
+    image_2 = await read_image_from_url(request.url2)
     if image_1 is None or image_2 is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to process one or both images.")
 
@@ -97,6 +100,8 @@ async def compare_faces_api(request: CompareRequest):
     response = compare_faces(face_1, face_2, threshold=THRESHOLD_VALUE)
     return response
 
+
+
 @app.exception_handler(Exception)
 async def generic_exception_handler(request, exc):
     """
@@ -106,6 +111,7 @@ async def generic_exception_handler(request, exc):
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"message": "An internal server error occurred."},
     )
+
 
 if __name__ == "__main__":
     import uvicorn
