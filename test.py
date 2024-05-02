@@ -13,7 +13,7 @@ async def send_request(session, url, payload):
 async def main():
     start_time = time.time()
     
-    url = "http://127.0.0.1:8555/compare-faces/"
+    url = "http://192.168.100.77:8555/compare-faces/"
     payload = {
         "url1": "https://api-digital.tsul.uz/storage/user_images_new/43110976520017.png",
         "url2": "https://api-digital.tsul.uz/storage/user_images_new/40102941670048.png"
