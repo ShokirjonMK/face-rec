@@ -157,7 +157,7 @@ def compare_faces(descriptor1: np.ndarray, descriptor2: np.ndarray, threshold: f
     euclidean_distance = compute_euclidean_distance(descriptor1, descriptor2)
     accuracy = 100 - round(euclidean_distance * 100, 2)
     
-    if accuracy < 51:
+    if accuracy < 44:
         return {"status": 1, "data": {"match": False, "accuracy": accuracy}, "message": "Error"}
     else:
         match = bool(euclidean_distance < threshold)
