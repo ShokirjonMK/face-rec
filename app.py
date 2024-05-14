@@ -49,7 +49,13 @@ async def read_image_from_url(url: str) -> Optional[np.ndarray]:
                     await cache.set(url, image)
                     return image
                 else:
-                    raise ValueError("Could not decode the image from the provided URL.")
+                    error_message = {
+                        "eng": "Could not decode the image from the provided URL.",
+                        "uzb": "Taqdim etilgan URL manzilidagi tasvirni dekodlab bo‘lmadi.",
+                        "rus": "Не удалось декодировать изображение по указанному URL.",
+                        "kril": "Тақдим етилган УРЛ манзилидаги тасвирни декодлаб бўлмади.",
+                    }
+                    raise ValueError(error_message)
         except Exception as e:
             print(f"Error reading image from URL {url}: {str(e)}")
             return None
@@ -152,16 +158,33 @@ def compare_faces(descriptor1: np.ndarray, descriptor2: np.ndarray, threshold: f
         dict: Dictionary containing match status and accuracy.
     """
     if descriptor1 is None or descriptor2 is None:
-        return {"error": "One or both images do not contain a face or failed to load correctly."}
+        error_message = {
+            "eng": "One or both images do not contain a face or failed to load correctly.",
+            "uzb": "Bir yoki ikkala rasmda yuz yo‘q yoki to‘g‘ri yuklanmadi.",
+            "rus": "`Одно или оба изображения не содержат лица или не удалось загрузить правильно.`.",
+            "kril": "Бир ёки иккала расмда юз йўқ ёки тўғри юкланмади.",
+        }
+        return {"error": error_message}
     
     euclidean_distance = compute_euclidean_distance(descriptor1, descriptor2)
     accuracy = 100 - round(euclidean_distance * 100, 2)
-    
     if accuracy < 49:
-        return {"status": 1, "data": {"match": False, "accuracy": accuracy}, "message": "Error"}
+        error_message = {
+            "eng": "Did not match.",
+            "uzb": "Mos Kelmadi.",
+            "rus": "Не совпало.",
+            "kril": "Мос Келмади.",
+        }
+        return {"status": 1, "data": {"match": False, "accuracy": accuracy}, "message": error_message}
     else:
+        success_message = {
+            "eng": "Successful.",
+            "uzb": "Muvaffaqiyatli.",
+            "rus": "Успешный.",
+            "kril": "Муваффақиятли.",
+        }
         match = bool(euclidean_distance < threshold)
-        return {"status": 1, "data": {"match": match, "accuracy": accuracy}, "message": "Success"}
+        return {"status": 1, "data": {"match": match, "accuracy": accuracy}, "message": success_message}
     
 
 @app.post("/compare-faces/")
@@ -178,7 +201,13 @@ async def compare_faces_api(request: CompareRequest):
     image1 = await read_image_from_url(request.url1)
     image2 = await read_image_from_url(request.url2)
     if image1 is None or image2 is None:
-        return {"status": 0, "message": "Failed to process one or both images"}
+        error_message = {
+            "eng": "Failed to process one or both images.",
+            "uzb": "Bir yoki ikkala rasmga ishlov berilmadi.",
+            "rus": "Не удалось обработать одно или оба изображения..",
+            "kril": "Бир ёки иккала расмга ишлов берилмади.",
+        }
+        return {"status": 0, "message": error_message}
 
     image1 = resize_image(image1)
     image2 = resize_image(image2)
@@ -186,8 +215,19 @@ async def compare_faces_api(request: CompareRequest):
     descriptor1, no_face1, _ = get_face_descriptor(image1)
     descriptor2, no_face2, _ = get_face_descriptor(image2)
     if no_face1 or no_face2:
-        
-        return {"status": 0, "message": "Please ensure that image 1 does not have a mask obscuring the face." if no_face1 else "Please ensure that image 2 does not have a mask obscuring the face"}
+        error_message_1 = {
+            "eng": "Please ensure that image 1 does not have a mask obscuring the face.",
+            "uzb": "Iltimos, 1-rasmda yuzni to'sib qo'yadigan niqob yo'qligiga ishonch hosil qiling.",
+            "rus": "Пожалуйста, убедитесь, что на изображении 1 нет маски, закрывающей лицо..",
+            "kril": "Илтимос, 1-расмда юзни тўсиб қўядиган ниқоб йўқлигига ишонч ҳосил қилинг.",
+        }
+        error_message_2 = {
+            "eng": "Please ensure that image 2 does not have a mask obscuring the face.",
+            "uzb": "Iltimos, 2-rasmda yuzni to'sib qo'yadigan niqob yo'qligiga ishonch hosil qiling.",
+            "rus": "Пожалуйста, убедитесь, что на изображении 2 нет маски, закрывающей лицо..",
+            "kril": "Илтимос, 2-расмда юзни тўсиб қўядиган ниқоб йўқлигига ишонч ҳосил қилинг.",
+        }
+        return {"status": 0, "message": error_message_1 if no_face1 else error_message_2}
 
     response = compare_faces(descriptor1, descriptor2)
     return response
